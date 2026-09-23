@@ -1,0 +1,22 @@
+services:
+  helper:
+    build: .
+    container_name: sorteradc-helper
+    ports:
+      - "8089:8089"
+    volumes:
+      - ../sorteradc-poc:/app
+      - ../sorter-testdata:/testdata
+      - ./backend:/helper/backend
+      - ./frontend:/helper/frontend
+    environment:
+      - POC_ROOT=/app
+      - TESTDATA_DIR=/testdata
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
