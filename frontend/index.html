@@ -3,42 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SorterADC Helper - 检测调参工具</title>
+<title>SorterADC Helper</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
-  <!-- Top bar -->
   <header id="topbar">
     <div class="topbar-left">
       <span class="logo">ADC Helper</span>
-      <select id="product-select" class="select"><option value="">选择产品...</option></select>
-      <select id="detection-type" class="select">
-        <option value="main">正面检测</option>
-        <option value="side">侧面检测</option>
-      </select>
-      <select id="side-select" class="select" style="display:none">
-        <option value="">选择侧面...</option>
-      </select>
+      <select id="flow-select" class="select"><option value="">选择流程...</option></select>
+      <select id="product-select" class="select" style="display:none"><option value="">选择产品...</option></select>
     </div>
     <div class="topbar-center">
-      <button id="btn-upload" class="btn btn-icon" title="上传图片">
+      <button id="btn-upload" class="btn btn-icon">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <span>上传图片</span>
       </button>
       <input type="file" id="file-input" accept="image/*" style="display:none">
-      <select id="test-image-select" class="select" style="min-width:280px"><option value="">或选择测试图...</option></select>
-      <button id="btn-run" class="btn btn-primary" title="运行检测">
+      <select id="test-image-select" class="select" style="min-width:240px"><option value="">或选择测试图...</option></select>
+      <button id="btn-run" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span>运行</span>
+        <span>运行全流程</span>
       </button>
     </div>
     <div class="topbar-right">
-      <button id="btn-save" class="btn" title="保存参数到模板">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      <button id="btn-save" class="btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
         <span>保存参数</span>
       </button>
-      <button id="btn-reset" class="btn" title="重置为默认参数">
+      <button id="btn-reset" class="btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
         <span>重置</span>
       </button>
@@ -47,44 +40,27 @@
   </header>
 
   <div id="main-body">
-    <!-- Left sidebar: parameters -->
     <aside id="sidebar">
-      <div id="param-panel">
-        <div class="sidebar-loading">加载中...</div>
-      </div>
+      <div id="param-panel"><div class="sidebar-loading">加载中...</div></div>
     </aside>
-
-    <!-- Main content: pipeline steps -->
     <main id="content">
       <div id="pipeline-view">
         <div class="empty-state">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-          <p>选择产品和图片后点击「运行」开始检测</p>
+          <p>选择流程和图片后点击「运行全流程」</p>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- Template preview modal -->
-  <div id="modal" class="modal" style="display:none">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span id="modal-title">模板预览</span>
-        <button id="modal-close" class="btn-close">&times;</button>
-      </div>
-      <div id="modal-body" class="modal-body"></div>
-    </div>
-  </div>
-
-  <!-- Image lightbox -->
   <div id="lightbox" class="lightbox" style="display:none">
     <div class="lightbox-inner">
       <img id="lightbox-img" src="">
       <button id="lightbox-close" class="btn-close">&times;</button>
     </div>
   </div>
-</div>
 
+  <canvas id="roi-canvas" style="display:none"></canvas>
+</div>
 <script src="app.js"></script>
 </body>
 </html>
