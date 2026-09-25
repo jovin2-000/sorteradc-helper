@@ -8,6 +8,7 @@ const State = {
   // ROI drawing state
   roiDrawing: { active: false, startX: 0, startY: 0, endX: 0, endY: 0, hasRect: false },
   pendingInteractiveImage: null,
+  lastRoi: null,
 };
 
 const $ = id => document.getElementById(id);
@@ -56,16 +57,27 @@ function bindEvents() {
   $("btn-roi-confirm").onclick = confirmRoi;
   $("btn-roi-clear").onclick = clearRoi;
   $("btn-roi-cancel").onclick = () => { $("roi-overlay").style.display = "none"; };
+  // Redraw ROI button
+  const btnRedraw = document.createElement("button");
+  btnRedraw.id = "btn-redraw-roi";
+  btnRedraw.className = "btn btn-sm";
+  btnRedraw.innerHTML = "<span>重新画框</span>";
+  btnRedraw.style.display = "none";
+  btnRedraw.onclick = () => { State.lastRoi = null; runFlow(); };
+  document.querySelector(".topbar-center").appendChild(btnRedraw);
 }
 
 async function onFlowChange() {
   const fid = $("flow-select").value;
   if (!fid) return;
   State.currentFlow = fid;
+  State.lastRoi = null;
+  const btnR = $("btn-redraw-roi"); if (btnR) btnR.style.display = "none";
   const isTemplate = fid === "template_create";
   $("product-select").style.display = isTemplate ? "none" : "";
   $("new-product-id").style.display = isTemplate ? "" : "none";
   $("btn-save-template").style.display = isTemplate ? "" : "none";
+  const btnRedraw = $("btn-redraw-roi"); if (btnRedraw) btnRedraw.style.display = isTemplate && State.lastRoi ? "" : "none";
   $("btn-save").style.display = isTemplate ? "none" : "";
   try {
     const r = await fetch(`/api/flows/${fid}/meta`);
@@ -103,7 +115,7 @@ async function loadProductParams(pid) {
 function onFileUpload(e) {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { State.image = reader.result; State.imageName = file.name;
+  reader.onload = () => { State.image = reader.result; State.imageName = file.name; State.lastRoi = null;
     setStatus("图片已加载", "status-idle"); if (State.currentFlow) scheduleRerun(); };
   reader.readAsDataURL(file);
 }
@@ -116,7 +128,7 @@ async function onTestImageSelect() {
     if (!resp.ok) throw new Error("Failed");
     const blob = await resp.blob();
     const reader = new FileReader();
-    reader.onload = () => { State.image = reader.result; State.imageName = path.split("/").pop();
+    reader.onload = () => { State.image = reader.result; State.imageName = path.split("/").pop(); State.lastRoi = null;
       setStatus("图片已加载", "status-idle"); if (State.currentFlow) scheduleRerun(); };
     reader.readAsDataURL(blob);
   } catch(e) { setStatus("加载失败", "status-ng"); }
@@ -137,6 +149,7 @@ async function runFlow(opts = {}) {
     const body = { image: State.image, params: State.params };
     if (State.currentProduct) body.product_id = State.currentProduct;
     if (opts.interactive_data) body.interactive_data = opts.interactive_data;
+    else if (State.lastRoi) body.interactive_data = { roi: State.lastRoi };
     if (opts.new_product_id) body.new_product_id = opts.new_product_id;
     const r = await fetch(`/api/flows/${State.currentFlow}/run`, {
       method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
@@ -254,6 +267,9 @@ function confirmRoi() {
   const realW = Math.round(Math.abs(d.endX - d.startX) / scale);
   const realH = Math.round(Math.abs(d.endY - d.startY) / scale);
   $("roi-overlay").style.display = "none";
+  // Store ROI for subsequent reruns
+  State.lastRoi = [realX, realY, realW, realH];
+  const btnRedraw = $("btn-redraw-roi"); if (btnRedraw) btnRedraw.style.display = "";
   // Re-run flow with ROI
   runFlow({ interactive_data: { roi: [realX, realY, realW, realH] } });
 }
