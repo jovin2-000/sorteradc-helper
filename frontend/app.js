@@ -1,17 +1,13 @@
-// sorteradc-helper - flow-agnostic frontend
+// sorteradc-helper - flow-agnostic frontend with interactive ROI drawing
 
 const State = {
-  flows: [],
-  currentFlow: null,
-  flowMeta: [],
-  schema: null,
-  products: [],
-  currentProduct: null,
-  params: {},
-  image: null,
-  imageName: null,
-  testImages: [],
+  flows: [], currentFlow: null, flowMeta: [], schema: null,
+  products: [], currentProduct: null, params: {},
+  image: null, imageName: null, testImages: [],
   rerunTimer: null,
+  // ROI drawing state
+  roiDrawing: { active: false, startX: 0, startY: 0, endX: 0, endY: 0, hasRect: false },
+  pendingInteractiveImage: null,
 };
 
 const $ = id => document.getElementById(id);
@@ -20,46 +16,23 @@ function setStatus(t, c) { const s=$("status-indicator"); s.textContent=t; s.cla
 
 async function init() {
   try {
-    const r = await fetch('/api/flows');
-    State.flows = await r.json();
-    const sel = $("flow-select");
-    sel.innerHTML = '<option value="">选择流程...</option>';
-    for (const f of State.flows) {
-      const o = el("option", null, `${f.name} (${f.operator_count}步)`);
-      o.value = f.id;
-      sel.appendChild(o);
-    }
+    const r = await fetch('/api/flows'); State.flows = await r.json();
+    const sel = $("flow-select"); sel.innerHTML = '<option value="">选择流程...</option>';
+    for (const f of State.flows) { const o = el("option", null, `${f.name} (${f.operator_count}步)`); o.value = f.id; sel.appendChild(o); }
   } catch(e) { console.error("flows load failed", e); }
-
   try {
-    const r = await fetch('/api/param-schema');
-    State.schema = await r.json();
+    const r = await fetch('/api/param-schema'); State.schema = await r.json();
   } catch(e) { console.error("schema load failed", e); }
-
   try {
-    const r = await fetch('/api/products');
-    State.products = await r.json();
-    const sel = $("product-select");
-    sel.innerHTML = '<option value="">选择产品...</option>';
-    for (const p of State.products) {
-      const o = el("option", null, `${p.product_id} (${p.state})`);
-      o.value = p.product_id;
-      sel.appendChild(o);
-    }
+    const r = await fetch('/api/products'); State.products = await r.json();
+    const sel = $("product-select"); sel.innerHTML = '<option value="">选择产品...</option>';
+    for (const p of State.products) { const o = el("option", null, `${p.product_id} (${p.state})`); o.value = p.product_id; sel.appendChild(o); }
   } catch(e) { console.error("products load failed", e); }
-
   try {
-    const r = await fetch('/api/test-images');
-    State.testImages = await r.json();
-    const sel = $("test-image-select");
-    sel.innerHTML = '<option value="">或选择测试图...</option>';
-    for (const img of State.testImages) {
-      const o = el("option", null, img.label);
-      o.value = img.path;
-      sel.appendChild(o);
-    }
+    const r = await fetch('/api/test-images'); State.testImages = await r.json();
+    const sel = $("test-image-select"); sel.innerHTML = '<option value="">或选择测试图...</option>';
+    for (const img of State.testImages) { const o = el("option", null, img.label); o.value = img.path; sel.appendChild(o); }
   } catch(e) { console.error("test images load failed", e); }
-
   bindEvents();
 }
 
@@ -71,55 +44,50 @@ function bindEvents() {
   $("test-image-select").onchange = onTestImageSelect;
   $("btn-run").onclick = runFlow;
   $("btn-save").onclick = saveParams;
+  $("btn-save-template").onclick = saveTemplate;
   $("btn-reset").onclick = resetParams;
   $("lightbox-close").onclick = () => $("lightbox").style.display="none";
   $("lightbox").onclick = e => { if(e.target===$("lightbox")) $("lightbox").style.display="none"; };
+  // ROI canvas events
+  const canvas = $("roi-canvas");
+  canvas.addEventListener("mousedown", onRoiMouseDown);
+  canvas.addEventListener("mousemove", onRoiMouseMove);
+  canvas.addEventListener("mouseup", onRoiMouseUp);
+  $("btn-roi-confirm").onclick = confirmRoi;
+  $("btn-roi-clear").onclick = clearRoi;
+  $("btn-roi-cancel").onclick = () => { $("roi-overlay").style.display = "none"; };
 }
 
 async function onFlowChange() {
   const fid = $("flow-select").value;
   if (!fid) return;
   State.currentFlow = fid;
-
-  // Show/hide product selector based on flow type
-  const isTemplateFlow = fid === "template_create";
-  $("product-select").style.display = isTemplateFlow ? "none" : "";
-
-  // Load flow meta
+  const isTemplate = fid === "template_create";
+  $("product-select").style.display = isTemplate ? "none" : "";
+  $("new-product-id").style.display = isTemplate ? "" : "none";
+  $("btn-save-template").style.display = isTemplate ? "" : "none";
+  $("btn-save").style.display = isTemplate ? "none" : "";
   try {
     const r = await fetch(`/api/flows/${fid}/meta`);
     const data = await r.json();
     State.flowMeta = data.operators || [];
-    // Show which params this flow uses
     const usedParams = new Set();
-    for (const op of State.flowMeta) {
-      for (const pk of (op.param_keys||[])) usedParams.add(pk);
-    }
+    for (const op of State.flowMeta) for (const pk of (op.param_keys||[])) usedParams.add(pk);
     State._usedParams = usedParams;
   } catch(e) { console.error("flow meta failed", e); }
-
-  // Load params from product if selected, or defaults
-  if (State.currentProduct && !isTemplateFlow) {
-    await loadProductParams(State.currentProduct);
-  } else {
-    State.params = getDefaultsFromSchema();
-    buildParamPanel();
-  }
+  if (State.currentProduct && !isTemplate) { await loadProductParams(State.currentProduct); }
+  else { State.params = getDefaultsFromSchema(); buildParamPanel(); }
   if (State.image) scheduleRerun();
 }
 
 function getDefaultsFromSchema() {
   if (!State.schema) return {};
-  const d = {};
-  for (const p of State.schema.params) d[p.name] = p.default;
-  return d;
+  const d = {}; for (const p of State.schema.params) d[p.name] = p.default; return d;
 }
 
 async function onProductChange() {
-  const pid = $("product-select").value;
-  if (!pid) return;
-  State.currentProduct = pid;
-  await loadProductParams(pid);
+  const pid = $("product-select").value; if (!pid) return;
+  State.currentProduct = pid; await loadProductParams(pid);
   if (State.image && State.currentFlow) scheduleRerun();
 }
 
@@ -128,39 +96,28 @@ async function loadProductParams(pid) {
     const r = await fetch(`/api/products/${encodeURIComponent(pid)}/params`);
     const data = await r.json();
     if (data.error) { alert(data.error); return; }
-    State.params = data.params;
-    buildParamPanel();
+    State.params = data.params; buildParamPanel();
   } catch(e) { alert("加载参数失败: " + e.message); }
 }
 
 function onFileUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+  const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
-    State.image = reader.result;
-    State.imageName = file.name;
-    setStatus("图片已加载", "status-idle");
-    if (State.currentFlow) scheduleRerun();
-  };
+  reader.onload = () => { State.image = reader.result; State.imageName = file.name;
+    setStatus("图片已加载", "status-idle"); if (State.currentFlow) scheduleRerun(); };
   reader.readAsDataURL(file);
 }
 
 async function onTestImageSelect() {
-  const path = $("test-image-select").value;
-  if (!path) return;
+  const path = $("test-image-select").value; if (!path) return;
   setStatus("加载测试图...", "status-running");
   try {
     const resp = await fetch(`/api/load-image?path=${encodeURIComponent(path)}`);
     if (!resp.ok) throw new Error("Failed");
     const blob = await resp.blob();
     const reader = new FileReader();
-    reader.onload = () => {
-      State.image = reader.result;
-      State.imageName = path.split("/").pop();
-      setStatus("图片已加载", "status-idle");
-      if (State.currentFlow) scheduleRerun();
-    };
+    reader.onload = () => { State.image = reader.result; State.imageName = path.split("/").pop();
+      setStatus("图片已加载", "status-idle"); if (State.currentFlow) scheduleRerun(); };
     reader.readAsDataURL(blob);
   } catch(e) { setStatus("加载失败", "status-ng"); }
 }
@@ -171,57 +128,179 @@ function scheduleRerun() {
   State.rerunTimer = setTimeout(runFlow, 600);
 }
 
-async function runFlow() {
+async function runFlow(opts = {}) {
   if (!State.currentFlow) { alert("请先选择流程"); return; }
   if (!State.image) { alert("请先选择或上传图片"); return; }
-
   setStatus("运行中...", "status-running");
   $("btn-run").disabled = true;
-
   try {
-    const body = {
-      image: State.image,
-      params: State.params,
-    };
+    const body = { image: State.image, params: State.params };
     if (State.currentProduct) body.product_id = State.currentProduct;
-
+    if (opts.interactive_data) body.interactive_data = opts.interactive_data;
+    if (opts.new_product_id) body.new_product_id = opts.new_product_id;
     const r = await fetch(`/api/flows/${State.currentFlow}/run`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(body),
-    });
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
     const result = await r.json();
-    if (result.error) {
-      setStatus("运行失败", "status-ng");
-      alert("运行失败: " + result.error);
-      return;
-    }
-    renderPipeline(result);
-    const overall = result.overall || "OK";
-    if (overall === "NG") {
-      setStatus(`NG - ${(result.ng_reasons||[]).join("; ")}`, "status-ng");
+    if (result.error) { setStatus("运行失败", "status-ng"); alert("运行失败: " + result.error); return; }
+
+    // Check for interactive steps (ROI drawing)
+    const interactiveStep = (result.steps||[]).find(s => s.status === "interactive");
+    if (interactiveStep && interactiveStep.interactive_data) {
+      showRoiOverlay(interactiveStep.interactive_data);
+      // Still render the pipeline with the interactive step
+      renderPipeline(result);
+      setStatus("请绘制ROI区域", "status-running");
     } else {
-      setStatus("OK", "status-ok");
+      renderPipeline(result);
+      const overall = result.overall || "OK";
+      if (overall === "NG") setStatus(`NG - ${(result.ng_reasons||[]).join("; ")}`, "status-ng");
+      else setStatus("OK", "status-ok");
     }
-  } catch(e) {
-    setStatus("运行异常", "status-ng");
-    alert("运行异常: " + e.message);
-  } finally {
-    $("btn-run").disabled = false;
+  } catch(e) { setStatus("运行异常", "status-ng"); alert("运行异常: " + e.message); }
+  finally { $("btn-run").disabled = false; }
+}
+
+// ---- ROI Canvas Drawing ----
+function showRoiOverlay(data) {
+  const overlay = $("roi-overlay");
+  const canvas = $("roi-canvas");
+  const img = new Image();
+  img.onload = () => {
+    const maxW = window.innerWidth - 80;
+    const maxH = window.innerHeight - 120;
+    let scale = Math.min(maxW / img.width, maxH / img.height, 1.0);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    canvas._scale = scale;
+    canvas._img = img;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    State.roiDrawing = { active: false, startX: 0, startY: 0, endX: 0, endY: 0, hasRect: false };
+    $("roi-coords").textContent = "";
+  };
+  img.src = data.image || State.image;
+  overlay.style.display = "flex";
+}
+
+function onRoiMouseDown(e) {
+  const canvas = $("roi-canvas");
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  State.roiDrawing.active = true;
+  State.roiDrawing.startX = x;
+  State.roiDrawing.startY = y;
+  State.roiDrawing.endX = x;
+  State.roiDrawing.endY = y;
+}
+
+function onRoiMouseMove(e) {
+  if (!State.roiDrawing.active) return;
+  const canvas = $("roi-canvas");
+  const rect = canvas.getBoundingClientRect();
+  State.roiDrawing.endX = e.clientX - rect.left;
+  State.roiDrawing.endY = e.clientY - rect.top;
+  redrawRoiCanvas();
+}
+
+function onRoiMouseUp(e) {
+  if (!State.roiDrawing.active) return;
+  State.roiDrawing.active = false;
+  const d = State.roiDrawing;
+  if (Math.abs(d.endX - d.startX) > 5 && Math.abs(d.endY - d.startY) > 5) {
+    d.hasRect = true;
+    const scale = $("roi-canvas")._scale || 1;
+    const realX = Math.round(Math.min(d.startX, d.endX) / scale);
+    const realY = Math.round(Math.min(d.startY, d.endY) / scale);
+    const realW = Math.round(Math.abs(d.endX - d.startX) / scale);
+    const realH = Math.round(Math.abs(d.endY - d.startY) / scale);
+    $("roi-coords").textContent = `x=${realX} y=${realY} w=${realW} h=${realH}`;
   }
 }
 
+function redrawRoiCanvas() {
+  const canvas = $("roi-canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(canvas._img, 0, 0, canvas.width, canvas.height);
+  if (State.roiDrawing.active || State.roiDrawing.hasRect) {
+    const d = State.roiDrawing;
+    const x = Math.min(d.startX, d.endX);
+    const y = Math.min(d.startY, d.endY);
+    const w = Math.abs(d.endX - d.startX);
+    const h = Math.abs(d.endY - d.startY);
+    ctx.strokeStyle = "#00ff00";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "rgba(0,255,0,0.1)";
+    ctx.fillRect(x, y, w, h);
+  }
+}
+
+function clearRoi() {
+  State.roiDrawing.hasRect = false;
+  State.roiDrawing.startX = 0; State.roiDrawing.startY = 0;
+  State.roiDrawing.endX = 0; State.roiDrawing.endY = 0;
+  $("roi-coords").textContent = "";
+  redrawRoiCanvas();
+}
+
+function confirmRoi() {
+  if (!State.roiDrawing.hasRect) { alert("请先在图像上绘制矩形"); return; }
+  const canvas = $("roi-canvas");
+  const scale = canvas._scale || 1;
+  const d = State.roiDrawing;
+  const realX = Math.round(Math.min(d.startX, d.endX) / scale);
+  const realY = Math.round(Math.min(d.startY, d.endY) / scale);
+  const realW = Math.round(Math.abs(d.endX - d.startX) / scale);
+  const realH = Math.round(Math.abs(d.endY - d.startY) / scale);
+  $("roi-overlay").style.display = "none";
+  // Re-run flow with ROI
+  runFlow({ interactive_data: { roi: [realX, realY, realW, realH] } });
+}
+
+// ---- Save Template ----
+async function saveTemplate() {
+  const pid = $("new-product-id").value.trim();
+  if (!pid) { alert("请输入新产品ID"); return; }
+  if (!State.image) { alert("请先上传图片并运行流程"); return; }
+  setStatus("保存模板中...", "status-running");
+  try {
+    const body = { image: State.image, params: State.params, new_product_id: pid };
+    // If we have a ROI from drawing, include it
+    if (State.roiDrawing.hasRect) {
+      const canvas = $("roi-canvas");
+      const scale = canvas._scale || 1;
+      const d = State.roiDrawing;
+      body.interactive_data = {
+        roi: [Math.round(Math.min(d.startX, d.endX) / scale),
+              Math.round(Math.min(d.startY, d.endY) / scale),
+              Math.round(Math.abs(d.endX - d.startX) / scale),
+              Math.round(Math.abs(d.endY - d.startY) / scale)]
+      };
+    }
+    const r = await fetch(`/api/flows/${State.currentFlow}/run`, {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
+    const result = await r.json();
+    if (result.error) { setStatus("保存失败", "status-ng"); alert("保存失败: " + result.error); return; }
+    // Check last step for save status
+    const lastStep = (result.steps||[]).find(s => s.name === "save_template");
+    if (lastStep && lastStep.metrics && lastStep.metrics.saved) {
+      setStatus(`模板已保存: ${pid}`, "status-ok");
+    } else {
+      renderPipeline(result);
+      setStatus("流程已完成，请检查结果", "status-idle");
+    }
+  } catch(e) { setStatus("保存异常", "status-ng"); alert("保存异常: " + e.message); }
+}
+
+// ---- Pipeline rendering ----
 function renderPipeline(result) {
   const view = $("pipeline-view");
   view.innerHTML = "";
   let lastGroup = "";
   for (const step of (result.steps||[])) {
-    // Group separator
-    if (step.group !== lastGroup) {
-      lastGroup = step.group;
-      const sep = el("div", "group-sep", step.group);
-      view.appendChild(sep);
-    }
+    if (step.group !== lastGroup) { lastGroup = step.group;
+      view.appendChild(el("div", "group-sep", step.group)); }
     view.appendChild(buildStepCard(step));
   }
 }
@@ -229,24 +308,17 @@ function renderPipeline(result) {
 function buildStepCard(step) {
   const card = el("div", "step-card");
   if (step.status === "skip") card.classList.add("card-skip");
-
   const header = el("div", "step-card-header");
   header.appendChild(el("span", "step-title", step.title));
-  if (step.status !== "ok") {
-    header.appendChild(el("span", `step-status-badge ${step.status}`, step.status.toUpperCase()));
-  }
+  if (step.status !== "ok") header.appendChild(el("span", `step-status-badge ${step.status}`, step.status.toUpperCase()));
   card.appendChild(header);
-
   const body = el("div", "step-body");
   if (step.image) {
     const imgC = el("div", "step-image-container");
     const img = el("img", "step-image");
-    img.src = step.image;
-    img.onclick = () => showLightbox(step.image);
-    imgC.appendChild(img);
-    body.appendChild(imgC);
+    img.src = step.image; img.onclick = () => showLightbox(step.image);
+    imgC.appendChild(img); body.appendChild(imgC);
   }
-
   const metrics = el("div", "step-metrics");
   if (step.metrics) {
     for (const [k,v] of Object.entries(step.metrics)) {
@@ -260,10 +332,8 @@ function buildStepCard(step) {
       if(k==="is_ng"&&v===false) mv.classList.add("ok");
       if(k==="overall"&&v==="NG") mv.classList.add("ng");
       if(k==="overall"&&v==="OK") mv.classList.add("ok");
-      mr.appendChild(mv);
-      metrics.appendChild(mr);
+      mr.appendChild(mv); metrics.appendChild(mr);
     }
-    // Time at bottom
     if (step.metrics.time_ms) {
       const tr = el("div", "metric-row");
       tr.appendChild(el("span", "metric-label", "time"));
@@ -271,25 +341,21 @@ function buildStepCard(step) {
       metrics.appendChild(tr);
     }
   }
-  body.appendChild(metrics);
-  card.appendChild(body);
+  body.appendChild(metrics); card.appendChild(body);
   return card;
 }
 
 // ---- Parameter panel ----
 function buildParamPanel() {
-  const panel = $("param-panel");
-  panel.innerHTML = "";
+  const panel = $("param-panel"); panel.innerHTML = "";
   if (!State.schema) return;
-
-  const usedParams = State._usedParams || null; // null = show all
+  const usedParams = State._usedParams || null;
   const byCat = {};
   for (const p of State.schema.params) {
     if (usedParams && !usedParams.has(p.name)) continue;
     if (!byCat[p.category]) byCat[p.category] = [];
     byCat[p.category].push(p);
   }
-
   for (const cat of State.schema.categories) {
     const params = byCat[cat.id];
     if (!params || !params.length) continue;
@@ -299,19 +365,16 @@ function buildParamPanel() {
     header.onclick = () => section.classList.toggle("collapsed");
     const body = el("div", "param-category-body");
     for (const p of params) body.appendChild(buildParamRow(p));
-    section.appendChild(header);
-    section.appendChild(body);
+    section.appendChild(header); section.appendChild(body);
     panel.appendChild(section);
   }
 }
 
 function buildParamRow(p) {
   const row = el("div", "param-row");
-  const label = el("span", "param-label", p.label);
-  label.title = p.label;
+  const label = el("span", "param-label", p.label); label.title = p.label;
   row.appendChild(label);
   const control = el("div", "param-control");
-
   switch(p.type) {
     case "bool": {
       const t = el("div", "param-toggle");
@@ -378,5 +441,4 @@ function resetParams() {
 }
 
 function showLightbox(src){ $("lightbox-img").src=src; $("lightbox").style.display="flex"; }
-
 init();

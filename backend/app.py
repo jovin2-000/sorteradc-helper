@@ -91,6 +91,7 @@ def api_flow_run(flow_id):
     custom_params = data.get("params", {})
     start_from = data.get("start_from", 0)
     interactive_data = data.get("interactive_data", {})
+    new_product_id = data.get("new_product_id", "")
 
     # Build context
     ctx_kwargs = {"params": _merge_params(product_id, custom_params)}
@@ -125,6 +126,7 @@ def api_flow_run(flow_id):
         ctx_kwargs["tpl_xym"] = td.tpl_xym
 
     # Interactive data (e.g. user-drawn ROI rectangle)
+    ctx_kwargs["new_product_id"] = new_product_id
     if interactive_data:
         if "roi" in interactive_data:
             ctx_kwargs["user_roi"] = tuple(interactive_data["roi"])

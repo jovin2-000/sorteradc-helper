@@ -96,3 +96,22 @@ def get_defaults():
     for p in PARAMS:
         defaults[p["name"]] = p["default"]
     return defaults
+
+# ---- template_create ----
+TEMPLATE_CREATE_PARAMS = [
+    {"name": "binarization_threshold", "type": "int", "min": 0, "max": 255, "step": 5, "default": 0, "label": "二值化阈值(0=OTSU)", "category": "template_create"},
+    {"name": "border_x", "type": "int", "min": 0, "max": 50, "step": 1, "default": 5, "label": "边界X方向余量(px)", "category": "template_create"},
+    {"name": "border_y", "type": "int", "min": 0, "max": 50, "step": 1, "default": 5, "label": "边界Y方向余量(px)", "category": "template_create"},
+    {"name": "border_kernel_size", "type": "int", "min": 1, "max": 15, "step": 2, "default": 3, "label": "前景掩码形态学核大小", "category": "template_create"},
+    {"name": "border_width", "type": "int", "min": 1, "max": 30, "step": 1, "default": 8, "label": "边框宽度(px)", "category": "template_create"},
+    {"name": "border_method", "type": "select", "options": ["direct", "distance"], "default": "direct", "label": "边框提取方法", "category": "template_create"},
+    {"name": "tc_ball_min_area", "type": "int", "min": 50, "max": 5000, "step": 50, "default": 500, "label": "球最小面积(创建用)", "category": "template_create"},
+    {"name": "tc_ball_max_area", "type": "int", "min": 200, "max": 10000, "step": 100, "default": 2500, "label": "球最大面积(创建用)", "category": "template_create"},
+    {"name": "tc_ball_circularity", "type": "float", "min": 0.3, "max": 1.0, "step": 0.05, "default": 0.6, "label": "球圆度阈值", "category": "template_create"},
+    {"name": "tc_ball_kernel_size", "type": "int", "min": 1, "max": 15, "step": 2, "default": 3, "label": "球掩码形态学核大小", "category": "template_create"},
+    {"name": "trace_threshold", "type": "int", "min": 0, "max": 255, "step": 5, "default": 100, "label": "轨迹二值化阈值", "category": "template_create"},
+    {"name": "trace_kernel", "type": "int", "min": 0, "max": 15, "step": 1, "default": 3, "label": "轨迹形态学核大小", "category": "template_create"},
+    {"name": "trace_iterations", "type": "int", "min": 1, "max": 10, "step": 1, "default": 1, "label": "轨迹形态学迭代次数", "category": "template_create"},
+]
+PARAMS.extend(TEMPLATE_CREATE_PARAMS)
+CATEGORIES.insert(0, {"id": "template_create", "title": "模板创建"})

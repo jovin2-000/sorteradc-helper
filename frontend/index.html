@@ -13,6 +13,7 @@
       <span class="logo">ADC Helper</span>
       <select id="flow-select" class="select"><option value="">选择流程...</option></select>
       <select id="product-select" class="select" style="display:none"><option value="">选择产品...</option></select>
+      <input type="text" id="new-product-id" class="text-input" placeholder="新产品ID" style="display:none">
     </div>
     <div class="topbar-center">
       <button id="btn-upload" class="btn btn-icon">
@@ -27,6 +28,10 @@
       </button>
     </div>
     <div class="topbar-right">
+      <button id="btn-save-template" class="btn" style="display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+        <span>保存模板</span>
+      </button>
       <button id="btn-save" class="btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
         <span>保存参数</span>
@@ -52,14 +57,28 @@
     </main>
   </div>
 
+  <!-- ROI drawing overlay -->
+  <div id="roi-overlay" class="roi-overlay" style="display:none">
+    <div class="roi-overlay-header">
+      <span>请在图像上绘制矩形框选 die 区域</span>
+      <div class="roi-overlay-actions">
+        <span id="roi-coords" class="roi-coords"></span>
+        <button id="btn-roi-clear" class="btn btn-sm">清除</button>
+        <button id="btn-roi-confirm" class="btn btn-primary btn-sm">确认ROI</button>
+        <button id="btn-roi-cancel" class="btn btn-sm">取消</button>
+      </div>
+    </div>
+    <div class="roi-canvas-wrapper">
+      <canvas id="roi-canvas"></canvas>
+    </div>
+  </div>
+
   <div id="lightbox" class="lightbox" style="display:none">
     <div class="lightbox-inner">
       <img id="lightbox-img" src="">
       <button id="lightbox-close" class="btn-close">&times;</button>
     </div>
   </div>
-
-  <canvas id="roi-canvas" style="display:none"></canvas>
 </div>
 <script src="app.js"></script>
 </body>
