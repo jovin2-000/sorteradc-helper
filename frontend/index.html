@@ -80,6 +80,32 @@
     </div>
   </div>
 </div>
+<script src="flowbuilder.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
+
+<!-- Flow builder overlay -->
+<div id="flow-builder-overlay" class="fb-overlay" style="display:none">
+  <div class="fb-panel">
+    <div class="fb-header">
+      <span>流程编辑器</span>
+      <button id="fb-close" class="btn-close">&times;</button>
+    </div>
+    <div class="fb-body">
+      <div class="fb-col fb-avail">
+        <div class="fb-col-title">可用算子</div>
+        <div id="fb-available" class="fb-list"></div>
+      </div>
+      <div class="fb-col fb-sel">
+        <div class="fb-col-title">已选流程 <span id="fb-count"></span></div>
+        <div id="fb-selected" class="fb-list"></div>
+      </div>
+    </div>
+    <div class="fb-footer">
+      <input type="hidden" id="fb-id">
+      <input type="text" id="fb-name" class="text-input" placeholder="流程名称">
+      <button id="fb-save" class="btn btn-primary btn-sm">保存流程</button>
+    </div>
+  </div>
+</div>

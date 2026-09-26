@@ -531,3 +531,116 @@ body {
   cursor: crosshair;
   display: block;
 }
+
+/* Flow builder overlay */
+.fb-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 180;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fb-panel {
+  background: var(--bg-panel);
+  border-radius: 8px;
+  width: 900px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.fb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.fb-body {
+  display: flex;
+  gap: 1px;
+  flex: 1;
+  overflow: hidden;
+  background: var(--border);
+}
+.fb-col {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  padding: 8px;
+}
+.fb-col-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.fb-list { display: flex; flex-direction: column; gap: 2px; }
+.fb-group { margin-bottom: 8px; }
+.fb-group-title {
+  font-size: 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  padding: 4px 0 2px;
+}
+.fb-op-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+.fb-op-item:hover { background: var(--bg-input); }
+.fb-op-item.selected {
+  background: var(--bg-card);
+  opacity: 0.4;
+  cursor: default;
+}
+.fb-op-params { font-size: 10px; color: var(--text-dim); }
+.fb-sel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  background: var(--bg-input);
+  margin-bottom: 2px;
+}
+.fb-sel-num {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.fb-sel-title { flex: 1; }
+.fb-sel-btns { display: flex; gap: 2px; }
+.fb-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.fb-footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+.fb-footer .text-input { flex: 1; }

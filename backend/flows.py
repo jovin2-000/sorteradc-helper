@@ -229,19 +229,36 @@ _FLOW_BUILDERS = {
 
 def get_flow(flow_id: str) -> Flow:
     """Get a flow by ID, building it on first access."""
-    if flow_id not in _FLOWS:
-        if flow_id in _FLOW_BUILDERS:
+    if flow_id in _FLOW_BUILDERS:
+        if flow_id not in _FLOWS:
             _FLOWS[flow_id] = _FLOW_BUILDERS[flow_id]()
-        else:
+        return _FLOWS[flow_id]
+    # Custom flow
+    if flow_id not in _FLOWS:
+        from registry import load_custom_flow, build_custom_flow
+        data = load_custom_flow(flow_id)
+        if data is None:
             raise ValueError(f"Unknown flow: {flow_id}")
+        _FLOWS[flow_id] = build_custom_flow(
+            data["id"], data["name"], data.get("description", ""), data["operators"])
     return _FLOWS[flow_id]
 
 
 def list_flows() -> list:
-    """List all available flows."""
-    return [{"id": fid, "name": b().name, "description": b().description,
-             "operator_count": len(b().operators)}
-            for fid, b in _FLOW_BUILDERS.items()]
+    """List all available flows (built-in + custom)."""
+    result = [{"id": fid, "name": b().name, "description": b().description,
+               "operator_count": len(b().operators), "custom": False}
+              for fid, b in _FLOW_BUILDERS.items()]
+    try:
+        from registry import list_custom_flows
+        for cf in list_custom_flows():
+            result.append({"id": cf["id"], "name": cf["name"],
+                           "description": cf.get("description", ""),
+                           "operator_count": len(cf.get("operators", [])),
+                           "custom": True})
+    except Exception:
+        pass
+    return result
 
 
 def reset_flow(flow_id: str):

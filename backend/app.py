@@ -235,6 +235,46 @@ def api_schema():
     return jsonify(get_schema())
 
 
+
+# ---- Operator registry API ----
+
+@app.route("/api/operators")
+def api_operators():
+    from registry import list_operators
+    return jsonify(list_operators())
+
+
+@app.route("/api/flows/custom")
+def api_list_custom_flows():
+    from registry import list_custom_flows
+    return jsonify(list_custom_flows())
+
+
+@app.route("/api/flows/custom", methods=["POST"])
+def api_save_custom_flow():
+    from registry import save_custom_flow
+    data = request.get_json()
+    flow_id = data.get("id", "")
+    name = data.get("name", "")
+    description = data.get("description", "")
+    op_names = data.get("operators", [])
+    if not flow_id or not name or not op_names:
+        return jsonify({"error": "id, name, operators are required"}), 400
+    result = save_custom_flow(flow_id, name, description, op_names)
+    # Clear flow cache so the new flow is rebuilt
+    from flows import reset_flow
+    reset_flow(flow_id)
+    return jsonify(result)
+
+
+@app.route("/api/flows/custom/<flow_id>", methods=["DELETE"])
+def api_delete_custom_flow(flow_id):
+    from registry import delete_custom_flow
+    from flows import reset_flow
+    reset_flow(flow_id)
+    ok = delete_custom_flow(flow_id)
+    return jsonify({"success": ok})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8089))
     print(f"sorteradc-helper starting on port {port}")
