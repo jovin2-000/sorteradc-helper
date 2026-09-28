@@ -86,10 +86,19 @@ class BoundaryOptimize(Operator):
 
 
 class FeatureExtract(Operator):
-    """Extract template gradient features (gx, gy, mag, contour, xym)."""
+    """Extract template gradient features: gx, gy, magnitude, contour points, xym.
+
+    Mirrors getTemplate.py extract_template_features:
+    1. Sobel gradients -> magnitude via cartToPolar
+    2. Edge detection: binary threshold (OTSU/fixed) or Canny
+    3. Find largest contour, optional convex hull
+    4. For each contour point: store [gx, gy, 1/magnitude] relative to top-left
+    """
 
     def __init__(self):
         super().__init__("feature_extract", "特征提取", "模板创建",
+                         param_keys=["feat_usebinary", "feat_use_otsu", "feat_threshold",
+                                     "feat_canny_thresh1", "feat_canny_thresh2", "feat_use_hull"],
                          input_keys=["roi_optimized"],
                          output_keys=["tpl_gx", "tpl_gy", "tpl_mag", "tpl_contour", "tpl_xym"])
 
@@ -98,22 +107,80 @@ class FeatureExtract(Operator):
         if roi is None:
             return self._result(None, status="skip")
         gray = to_gray(roi)
-        gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        mag = cv2.magnitude(gx, gy)
-        edges = cv2.Canny(gray, 100, 200)
+
+        # 1. Compute Sobel gradients and magnitude
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1)
+        magnitude, direction = cv2.cartToPolar(gx, gy)
+
+        # 2. Edge detection
+        usebinary = ctx.p("feat_usebinary", True)
+        use_otsu = ctx.p("feat_use_otsu", False)
+        threshold = ctx.p("feat_threshold", 80)
+        canny_t1 = ctx.p("feat_canny_thresh1", 100)
+        canny_t2 = ctx.p("feat_canny_thresh2", 200)
+
+        if usebinary:
+            if use_otsu:
+                _, edges = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+            else:
+                _, edges = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+        else:
+            edges = cv2.Canny(gray, canny_t1, canny_t2)
+
+        # 3. Find contours and extract features
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        contour_pts = np.vstack(contours) if contours else np.array([[0, 0]])
+        use_hull = ctx.p("feat_use_hull", True)
+
+        if contours:
+            max_contour = max(contours, key=cv2.contourArea)
+
+            if use_hull:
+                hull = cv2.convexHull(max_contour)
+                edges = cv2.drawContours(edges, [hull], -1, 255, -1)
+                cts, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
+                max_contour = max(cts, key=cv2.contourArea)
+                hull = cv2.convexHull(max_contour)
+                edges = cv2.drawContours(edges, [hull], -1, 255, -1)
+                pts = np.array(hull).reshape((-1, 2))
+            else:
+                pts = np.array(max_contour).reshape((-1, 2))
+
+            # Compute relative position and gradient info (xym)
+            original_x = int(np.min(pts[:, 0]))
+            original_y = int(np.min(pts[:, 1]))
+            t_xym = []
+            for p in pts:
+                x = int(p[0])
+                y = int(p[1])
+                p[0] = x - original_x
+                p[1] = y - original_y
+                if magnitude[y, x] == 0.0:
+                    t_xym.append([float(gx[y, x]), float(gy[y, x]), 0.0])
+                else:
+                    t_xym.append([float(gx[y, x]), float(gy[y, x]), float(1.0 / magnitude[y, x])])
+
+            ctx.set("tpl_gx", gx)
+            ctx.set("tpl_gy", gy)
+            ctx.set("tpl_mag", magnitude)
+            ctx.set("tpl_contour", pts)
+            ctx.set("tpl_xym", np.array(t_xym))
+
+            vis = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+            cv2.drawContours(vis, [max_contour], -1, (0, 255, 0), 1)
+            if use_hull and 'hull' in dir():
+                cv2.drawContours(vis, [hull], -1, (0, 0, 255), 1)
+            return self._result(vis, {"contours": len(contours),
+                                       "feature_pts": len(pts),
+                                       "usebinary": usebinary,
+                                       "use_hull": use_hull})
+
         ctx.set("tpl_gx", gx)
         ctx.set("tpl_gy", gy)
-        ctx.set("tpl_mag", mag)
-        ctx.set("tpl_contour", contour_pts)
+        ctx.set("tpl_mag", magnitude)
+        ctx.set("tpl_contour", np.array([[0, 0]]))
         ctx.set("tpl_xym", np.array([]))
-        vis = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        cv2.drawContours(vis, contours, -1, (0, 255, 0), 1)
-        return self._result(vis, {"contours": len(contours),
-                                   "feature_pts": len(contour_pts)})
-
+        return self._result(edges, {"contours": 0}, status="fail")
 
 class ForegroundMask(Operator):
     """Generate foreground mask via OTSU/threshold + morphology."""

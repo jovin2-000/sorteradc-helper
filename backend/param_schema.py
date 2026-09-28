@@ -115,3 +115,14 @@ TEMPLATE_CREATE_PARAMS = [
 ]
 PARAMS.extend(TEMPLATE_CREATE_PARAMS)
 CATEGORIES.insert(0, {"id": "template_create", "title": "模板创建"})
+
+# ---- feature_extract (模板创建-特征提取) ----
+FEATURE_EXTRACT_PARAMS = [
+    {"name": "feat_usebinary", "type": "bool", "default": True, "label": "边缘检测: True=二值化 False=Canny", "category": "template_create"},
+    {"name": "feat_use_otsu", "type": "bool", "default": False, "label": "二值化: True=OTSU False=固定阈值", "category": "template_create"},
+    {"name": "feat_threshold", "type": "int", "min": 0, "max": 255, "step": 5, "default": 80, "label": "二值化阈值(use_otsu=False时)", "category": "template_create"},
+    {"name": "feat_canny_thresh1", "type": "int", "min": 0, "max": 255, "step": 5, "default": 100, "label": "Canny低阈值(usebinary=False时)", "category": "template_create"},
+    {"name": "feat_canny_thresh2", "type": "int", "min": 0, "max": 255, "step": 5, "default": 200, "label": "Canny高阈值(usebinary=False时)", "category": "template_create"},
+    {"name": "feat_use_hull", "type": "bool", "default": True, "label": "轮廓凸包处理", "category": "template_create"},
+]
+PARAMS.extend(FEATURE_EXTRACT_PARAMS)

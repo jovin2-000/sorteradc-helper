@@ -51,9 +51,9 @@ function bindEvents() {
   $("lightbox").onclick = e => { if(e.target===$("lightbox")) $("lightbox").style.display="none"; };
   // ROI canvas events
   const canvas = $("roi-canvas");
-  canvas.addEventListener("mousedown", onRoiMouseDown);
-  canvas.addEventListener("mousemove", onRoiMouseMove);
-  canvas.addEventListener("mouseup", onRoiMouseUp);
+  canvas.addEventListener("click", onRoiCanvasClick);
+  canvas.addEventListener("mousemove", onRoiCanvasMove);
+  canvas.addEventListener("wheel", onRoiCanvasWheel);
   $("btn-roi-confirm").onclick = confirmRoi;
   $("btn-roi-clear").onclick = clearRoi;
   $("btn-roi-cancel").onclick = () => { $("roi-overlay").style.display = "none"; };
@@ -173,104 +173,154 @@ async function runFlow(opts = {}) {
   finally { $("btn-run").disabled = false; }
 }
 
-// ---- ROI Canvas Drawing ----
+// ---- ROI Canvas Drawing (click-click + zoom) ----
 function showRoiOverlay(data) {
   const overlay = $("roi-overlay");
   const canvas = $("roi-canvas");
   const img = new Image();
   img.onload = () => {
+    // Start at fit-to-screen scale
     const maxW = window.innerWidth - 80;
     const maxH = window.innerHeight - 120;
-    let scale = Math.min(maxW / img.width, maxH / img.height, 1.0);
-    canvas.width = img.width * scale;
-    canvas.height = img.height * scale;
-    canvas._scale = scale;
-    canvas._img = img;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    State.roiDrawing = { active: false, startX: 0, startY: 0, endX: 0, endY: 0, hasRect: false };
-    $("roi-coords").textContent = "";
+    State.roiCanvas = { img: img, scale: Math.min(maxW / img.width, maxH / img.height, 1.0),
+                        offsetX: 0, offsetY: 0,
+                        clickState: 0,  // 0=waiting first click, 1=waiting second click
+                        startX: 0, startY: 0, endX: 0, endY: 0, hasRect: false };
+    // Center the image
+    const cw = img.width * State.roiCanvas.scale;
+    const ch = img.height * State.roiCanvas.scale;
+    State.roiCanvas.offsetX = (canvas.width - cw) / 2;
+    State.roiCanvas.offsetY = (canvas.height - ch) / 2;
+    // Set canvas to container size
+    const wrapper = canvas.parentElement;
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+    redrawRoiCanvas();
+    $("roi-coords").textContent = "点击第一个角点";
   };
   img.src = data.image || State.image;
   overlay.style.display = "flex";
 }
 
-function onRoiMouseDown(e) {
-  const canvas = $("roi-canvas");
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  State.roiDrawing.active = true;
-  State.roiDrawing.startX = x;
-  State.roiDrawing.startY = y;
-  State.roiDrawing.endX = x;
-  State.roiDrawing.endY = y;
+function screenToImage(sx, sy) {
+  const c = State.roiCanvas;
+  return { x: (sx - c.offsetX) / c.scale, y: (sy - c.offsetY) / c.scale };
 }
 
-function onRoiMouseMove(e) {
-  if (!State.roiDrawing.active) return;
+function onRoiCanvasClick(e) {
+  const c = State.roiCanvas;
+  if (!c) return;
   const canvas = $("roi-canvas");
   const rect = canvas.getBoundingClientRect();
-  State.roiDrawing.endX = e.clientX - rect.left;
-  State.roiDrawing.endY = e.clientY - rect.top;
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const imgPt = screenToImage(sx, sy);
+
+  if (c.clickState === 0) {
+    // First click - set start point
+    c.startX = imgPt.x; c.startY = imgPt.y;
+    c.endX = imgPt.x; c.endY = imgPt.y;
+    c.clickState = 1;
+    c.hasRect = false;
+    $("roi-coords").textContent = `起点: (${Math.round(imgPt.x)}, ${Math.round(imgPt.y)}) - 点击第二个角点`;
+  } else {
+    // Second click - set end point, finalize
+    c.endX = imgPt.x; c.endY = imgPt.y;
+    c.clickState = 0;
+    c.hasRect = true;
+    const x = Math.round(Math.min(c.startX, c.endX));
+    const y = Math.round(Math.min(c.startY, c.endY));
+    const w = Math.round(Math.abs(c.endX - c.startX));
+    const h = Math.round(Math.abs(c.endY - c.startY));
+    if (w > 5 && h > 5) {
+      $("roi-coords").textContent = `x=${x} y=${y} w=${w} h=${h}`;
+    } else {
+      c.hasRect = false;
+      $("roi-coords").textContent = "点击第一个角点";
+    }
+  }
   redrawRoiCanvas();
 }
 
-function onRoiMouseUp(e) {
-  if (!State.roiDrawing.active) return;
-  State.roiDrawing.active = false;
-  const d = State.roiDrawing;
-  if (Math.abs(d.endX - d.startX) > 5 && Math.abs(d.endY - d.startY) > 5) {
-    d.hasRect = true;
-    const scale = $("roi-canvas")._scale || 1;
-    const realX = Math.round(Math.min(d.startX, d.endX) / scale);
-    const realY = Math.round(Math.min(d.startY, d.endY) / scale);
-    const realW = Math.round(Math.abs(d.endX - d.startX) / scale);
-    const realH = Math.round(Math.abs(d.endY - d.startY) / scale);
-    $("roi-coords").textContent = `x=${realX} y=${realY} w=${realW} h=${realH}`;
-  }
+function onRoiCanvasMove(e) {
+  const c = State.roiCanvas;
+  if (!c || c.clickState !== 1) return;
+  const canvas = $("roi-canvas");
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const imgPt = screenToImage(sx, sy);
+  c.endX = imgPt.x; c.endY = imgPt.y;
+  redrawRoiCanvas();
+}
+
+function onRoiCanvasWheel(e) {
+  const c = State.roiCanvas;
+  if (!c) return;
+  e.preventDefault();
+  const canvas = $("roi-canvas");
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const imgPt = screenToImage(mx, my);
+  const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+  c.scale = Math.max(0.05, Math.min(10.0, c.scale * factor));
+  // Keep cursor pointing at same image point
+  c.offsetX = mx - imgPt.x * c.scale;
+  c.offsetY = my - imgPt.y * c.scale;
+  redrawRoiCanvas();
 }
 
 function redrawRoiCanvas() {
   const canvas = $("roi-canvas");
   const ctx = canvas.getContext("2d");
-  ctx.drawImage(canvas._img, 0, 0, canvas.width, canvas.height);
-  if (State.roiDrawing.active || State.roiDrawing.hasRect) {
-    const d = State.roiDrawing;
-    const x = Math.min(d.startX, d.endX);
-    const y = Math.min(d.startY, d.endY);
-    const w = Math.abs(d.endX - d.startX);
-    const h = Math.abs(d.endY - d.startY);
+  const c = State.roiCanvas;
+  if (!c) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(c.img, c.offsetX, c.offsetY,
+                c.img.width * c.scale, c.img.height * c.scale);
+  // Draw rectangle
+  if (c.clickState === 1 || c.hasRect) {
+    const x1 = c.startX * c.scale + c.offsetX;
+    const y1 = c.startY * c.scale + c.offsetY;
+    const x2 = c.endX * c.scale + c.offsetX;
+    const y2 = c.endY * c.scale + c.offsetY;
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
     ctx.strokeStyle = "#00ff00";
     ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, w, h);
+    ctx.strokeRect(rx, ry, rw, rh);
     ctx.fillStyle = "rgba(0,255,0,0.1)";
-    ctx.fillRect(x, y, w, h);
+    ctx.fillRect(rx, ry, rw, rh);
+    // Draw corner markers
+    ctx.fillStyle = "#00ff00";
+    [x1, x2].forEach(px => [y1, y2].forEach(py => {
+      ctx.beginPath(); ctx.arc(px, py, 4, 0, 2 * Math.PI); ctx.fill();
+    }));
   }
 }
 
 function clearRoi() {
-  State.roiDrawing.hasRect = false;
-  State.roiDrawing.startX = 0; State.roiDrawing.startY = 0;
-  State.roiDrawing.endX = 0; State.roiDrawing.endY = 0;
-  $("roi-coords").textContent = "";
+  const c = State.roiCanvas;
+  if (!c) return;
+  c.hasRect = false; c.clickState = 0;
+  c.startX = 0; c.startY = 0; c.endX = 0; c.endY = 0;
+  $("roi-coords").textContent = "点击第一个角点";
   redrawRoiCanvas();
 }
 
 function confirmRoi() {
-  if (!State.roiDrawing.hasRect) { alert("请先在图像上绘制矩形"); return; }
-  const canvas = $("roi-canvas");
-  const scale = canvas._scale || 1;
-  const d = State.roiDrawing;
-  const realX = Math.round(Math.min(d.startX, d.endX) / scale);
-  const realY = Math.round(Math.min(d.startY, d.endY) / scale);
-  const realW = Math.round(Math.abs(d.endX - d.startX) / scale);
-  const realH = Math.round(Math.abs(d.endY - d.startY) / scale);
+  const c = State.roiCanvas;
+  if (!c || !c.hasRect) { alert("请先点击两个角点绘制矩形"); return; }
+  const realX = Math.round(Math.min(c.startX, c.endX));
+  const realY = Math.round(Math.min(c.startY, c.endY));
+  const realW = Math.round(Math.abs(c.endX - c.startX));
+  const realH = Math.round(Math.abs(c.endY - c.startY));
   $("roi-overlay").style.display = "none";
-  // Store ROI for subsequent reruns
   State.lastRoi = [realX, realY, realW, realH];
   const btnRedraw = $("btn-redraw-roi"); if (btnRedraw) btnRedraw.style.display = "";
-  // Re-run flow with ROI
   runFlow({ interactive_data: { roi: [realX, realY, realW, realH] } });
 }
 
