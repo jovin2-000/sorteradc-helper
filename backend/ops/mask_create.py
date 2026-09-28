@@ -36,8 +36,20 @@ class ROISelect(Operator):
             ctx.set("roi_rect", (x, y, x + w, y + h))
             ctx.set("roi_image", img[y:y + h, x:x + w])
             vis = img.copy()
-            cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            return self._result(vis, {"x": x, "y": y, "w": w, "h": h})
+            cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 3)
+            # Draw coordinate labels
+            cv2.putText(vis, f"({x},{y})", (x + 5, y - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(vis, f"{w}x{h}", (x + w // 2 - 30, y + h + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(vis, f"({x+w},{y+h})", (x + w - 60, y + h + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            # Draw corner markers
+            for cx, cy in [(x, y), (x+w, y), (x, y+h), (x+w, y+h)]:
+                cv2.drawMarker(vis, (cx, cy), (0, 255, 0), cv2.MARKER_CROSS, 15, 2)
+            return self._result(vis, {"x": x, "y": y, "w": w, "h": h,
+                                       "top_left": f"({x},{y})",
+                                       "size": f"{w}x{h}"})
         return self._result(img, {"needs_input": True}, status="interactive",
                             interactive_data={"type": "rect_select", "image": _encode(img)})
 
