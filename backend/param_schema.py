@@ -126,3 +126,10 @@ FEATURE_EXTRACT_PARAMS = [
     {"name": "feat_use_hull", "type": "bool", "default": True, "label": "轮廓凸包处理", "category": "template_create"},
 ]
 PARAMS.extend(FEATURE_EXTRACT_PARAMS)
+
+# Missing params used by template method threshold operator
+MISSING_PARAMS = [
+    {"name": "border_template_diff_threshold", "type": "int", "min": 0, "max": 255, "step": 5, "default": 128, "label": "模板法轮廓差分阈值", "category": "border_defect"},
+    {"name": "surface_template_diff_threshold", "type": "int", "min": 0, "max": 255, "step": 5, "default": 128, "label": "模板法轮廓差分阈值", "category": "surface_defect"},
+]
+PARAMS.extend(MISSING_PARAMS)
