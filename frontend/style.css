@@ -489,21 +489,22 @@ body {
 .roi-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.8);
+  background: rgba(0,0,0,0.95);
   z-index: 150;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 20px;
+  padding: 0;
 }
 .roi-overlay-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  max-width: 1200px;
-  margin-bottom: 10px;
+  padding: 8px 16px;
+  flex-shrink: 0;
   gap: 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
 }
 .roi-overlay-header span:first-child {
   font-size: 14px;
@@ -521,15 +522,16 @@ body {
   min-width: 200px;
 }
 .roi-canvas-wrapper {
+  flex: 1;
   background: #000;
-  border-radius: 8px;
-  overflow: auto;
-  max-width: 100%;
-  max-height: calc(100vh - 100px);
+  overflow: hidden;
+  position: relative;
 }
 #roi-canvas {
   cursor: crosshair;
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* Flow builder overlay */
@@ -644,3 +646,14 @@ body {
   align-items: center;
 }
 .fb-footer .text-input { flex: 1; }
+
+/* Operator sub-header within parameter sections */
+.param-op-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 6px 0 2px;
+  margin-top: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.param-op-header:first-child { margin-top: 0; }

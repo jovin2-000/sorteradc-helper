@@ -54,6 +54,9 @@ function bindEvents() {
   canvas.addEventListener("click", onRoiCanvasClick);
   canvas.addEventListener("mousemove", onRoiCanvasMove);
   canvas.addEventListener("wheel", onRoiCanvasWheel);
+  canvas.addEventListener("contextmenu", onRoiCanvasContextMenu);
+  canvas.addEventListener("mousedown", onRoiCanvasMouseDown);
+  canvas.addEventListener("mouseup", onRoiCanvasMouseUp);
   $("btn-roi-confirm").onclick = confirmRoi;
   $("btn-roi-clear").onclick = clearRoi;
   $("btn-roi-cancel").onclick = () => { $("roi-overlay").style.display = "none"; };
@@ -185,6 +188,7 @@ function showRoiOverlay(data) {
     State.roiCanvas = { img: img, scale: Math.min(maxW / img.width, maxH / img.height, 1.0),
                         offsetX: 0, offsetY: 0,
                         clickState: 0,  // 0=waiting first click, 1=waiting second click
+                        panning: false, panStartX: 0, panStartY: 0, panOffX: 0, panOffY: 0,
                         startX: 0, startY: 0, endX: 0, endY: 0, hasRect: false };
     // Center the image
     const cw = img.width * State.roiCanvas.scale;
@@ -210,6 +214,8 @@ function screenToImage(sx, sy) {
 function onRoiCanvasClick(e) {
   const c = State.roiCanvas;
   if (!c) return;
+  // Skip click if we just finished panning
+  if (c.justPanned) { c.justPanned = false; return; }
   const canvas = $("roi-canvas");
   const rect = canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
@@ -244,7 +250,9 @@ function onRoiCanvasClick(e) {
 
 function onRoiCanvasMove(e) {
   const c = State.roiCanvas;
-  if (!c || c.clickState !== 1) return;
+  if (!c) return;
+  if (c.panning) { onRoiCanvasPanMove(e); return; }
+  if (c.clickState !== 1) return;
   const canvas = $("roi-canvas");
   const rect = canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left;
@@ -268,6 +276,53 @@ function onRoiCanvasWheel(e) {
   // Keep cursor pointing at same image point
   c.offsetX = mx - imgPt.x * c.scale;
   c.offsetY = my - imgPt.y * c.scale;
+  redrawRoiCanvas();
+}
+
+function onRoiCanvasContextMenu(e) {
+  e.preventDefault();
+  const c = State.roiCanvas;
+  if (!c) return;
+  if (c.clickState === 1) {
+    // Cancel first point
+    c.clickState = 0;
+    c.hasRect = false;
+    c.startX = 0; c.startY = 0; c.endX = 0; c.endY = 0;
+    $("roi-coords").textContent = "点击第一个角点";
+    redrawRoiCanvas();
+  }
+}
+
+function onRoiCanvasMouseDown(e) {
+  const c = State.roiCanvas;
+  if (!c) return;
+  // Alt + left button starts panning
+  if (e.altKey && e.button === 0) {
+    e.preventDefault();
+    c.panning = true;
+    c.panStartX = e.clientX;
+    c.panStartY = e.clientY;
+    c.panOffX = c.offsetX;
+    c.panOffY = c.offsetY;
+    $("roi-canvas").style.cursor = "grabbing";
+  }
+}
+
+function onRoiCanvasMouseUp(e) {
+  const c = State.roiCanvas;
+  if (!c) return;
+  if (c.panning) {
+    c.panning = false;
+    c.justPanned = true;
+    $("roi-canvas").style.cursor = "crosshair";
+  }
+}
+
+function onRoiCanvasPanMove(e) {
+  const c = State.roiCanvas;
+  if (!c || !c.panning) return;
+  c.offsetX = c.panOffX + (e.clientX - c.panStartX);
+  c.offsetY = c.panOffY + (e.clientY - c.panStartY);
   redrawRoiCanvas();
 }
 
@@ -411,82 +466,68 @@ function buildStepCard(step) {
   return card;
 }
 
-// ---- Parameter panel ----
+// ---- Parameter panel: organized by operator step ----
 function buildParamPanel() {
   const panel = $("param-panel"); panel.innerHTML = "";
   if (!State.schema) return;
-  const usedParams = State._usedParams || null;
-  const byCat = {};
-  for (const p of State.schema.params) {
-    if (usedParams && !usedParams.has(p.name)) continue;
-    if (!byCat[p.category]) byCat[p.category] = [];
-    byCat[p.category].push(p);
-  }
-  for (const cat of State.schema.categories) {
-    const params = byCat[cat.id];
-    if (!params || !params.length) continue;
-    const section = el("div", "param-category");
-    const header = el("div", "param-category-header");
-    header.innerHTML = `<span>${cat.title}</span><span class="chevron">&#9660;</span>`;
-    header.onclick = () => section.classList.toggle("collapsed");
-    const body = el("div", "param-category-body");
-    for (const p of params) body.appendChild(buildParamRow(p));
-    section.appendChild(header); section.appendChild(body);
-    panel.appendChild(section);
-  }
-}
+  const paramMap = {};
+  for (const p of State.schema.params) paramMap[p.name] = p;
 
-function buildParamRow(p) {
-  const row = el("div", "param-row");
-  const label = el("span", "param-label", p.label); label.title = p.label;
-  row.appendChild(label);
-  const control = el("div", "param-control");
-  switch(p.type) {
-    case "bool": {
-      const t = el("div", "param-toggle");
-      if(State.params[p.name]) t.classList.add("on");
-      t.onclick = () => { State.params[p.name]=!State.params[p.name]; t.classList.toggle("on"); scheduleRerun(); };
-      control.appendChild(t); break;
+  if (State.flowMeta && State.flowMeta.length > 0) {
+    const groups = [];
+    let lastGroup = "";
+    for (let i = 0; i < State.flowMeta.length; i++) {
+      const op = State.flowMeta[i];
+      if (op.group !== lastGroup) {
+        groups.push({ name: op.group, ops: [] });
+        lastGroup = op.group;
+      }
+      groups[groups.length - 1].ops.push({ ...op, index: i });
     }
-    case "float": case "int": {
-      const sl = el("input","param-slider"); sl.type="range"; sl.min=p.min; sl.max=p.max; sl.step=p.step; sl.value=State.params[p.name]??p.default;
-      const ip = el("input","param-input"); ip.type="number"; ip.min=p.min; ip.max=p.max; ip.step=p.step; ip.value=State.params[p.name]??p.default;
-      sl.oninput = () => { State.params[p.name]=parseFloat(sl.value); ip.value=sl.value; scheduleRerun(); };
-      ip.onchange = () => { let v=parseFloat(ip.value)||p.default; v=Math.max(p.min,Math.min(p.max,v)); State.params[p.name]=v; sl.value=v; ip.value=v; scheduleRerun(); };
-      control.appendChild(sl); control.appendChild(ip); break;
+    for (const grp of groups) {
+      let hasParams = false;
+      for (const op of grp.ops) {
+        if (op.param_keys && op.param_keys.length > 0) { hasParams = true; break; }
+      }
+      if (!hasParams) continue;
+      const section = el("div", "param-category");
+      const header = el("div", "param-category-header");
+      header.innerHTML = `<span>${grp.name}</span><span class="chevron">&#9660;</span>`;
+      header.onclick = () => section.classList.toggle("collapsed");
+      const body = el("div", "param-category-body");
+      for (const op of grp.ops) {
+        if (!op.param_keys || op.param_keys.length === 0) continue;
+        const opHeader = el("div", "param-op-header");
+        opHeader.textContent = `${op.index + 1}. ${op.title}`;
+        body.appendChild(opHeader);
+        for (const pk of op.param_keys) {
+          const p = paramMap[pk];
+          if (p) body.appendChild(buildParamRow(p));
+        }
+      }
+      section.appendChild(header);
+      section.appendChild(body);
+      panel.appendChild(section);
     }
-    case "select": {
-      const s = el("select","param-select");
-      for(const o of p.options){ const op=el("option",null,o); if(o===State.params[p.name]) op.selected=true; s.appendChild(op); }
-      s.onchange = () => { State.params[p.name]=s.value; scheduleRerun(); };
-      control.appendChild(s); break;
+  } else {
+    const byCat = {};
+    for (const p of State.schema.params) {
+      if (!byCat[p.category]) byCat[p.category] = [];
+      byCat[p.category].push(p);
     }
-    case "multiselect": {
-      const chips = el("div","multiselect-row");
-      for(const o of p.options){ const c=el("span","multiselect-chip",o); if(State.params[p.name]?.includes(o)) c.classList.add("active");
-        c.onclick=()=>{ let a=State.params[p.name]||[]; a=a.includes(o)?a.filter(x=>x!==o):[...a,o]; State.params[p.name]=a; c.classList.toggle("active"); scheduleRerun(); };
-        chips.appendChild(c); }
-      control.appendChild(chips); break;
-    }
-    case "weights": {
-      const w = State.params[p.name]||p.default;
-      for(const o of p.options){ const wr=el("div","weight-row"); wr.appendChild(el("span","weight-label",o));
-        const wi=el("input","weight-input"); wi.type="number"; wi.step="0.05"; wi.min="0"; wi.max="1"; wi.value=w[o]??0;
-        wi.onchange=()=>{ let v=parseFloat(wi.value)||0; v=Math.max(0,Math.min(1,v)); if(!State.params[p.name])State.params[p.name]={}; State.params[p.name][o]=v; wi.value=v; scheduleRerun(); };
-        wr.appendChild(wi); control.appendChild(wr); }
-      break;
-    }
-    case "tuple_float": {
-      const a=State.params[p.name]||p.default;
-      const i1=el("input","param-input"); i1.type="number"; i1.step="0.1"; i1.value=a[0]??0;
-      const i2=el("input","param-input"); i2.type="number"; i2.step="0.1"; i2.value=a[1]??0;
-      const upd=()=>{ State.params[p.name]=[parseFloat(i1.value)||0, parseFloat(i2.value)||0]; scheduleRerun(); };
-      i1.onchange=upd; i2.onchange=upd;
-      control.appendChild(i1); control.appendChild(i2); break;
+    for (const cat of State.schema.categories) {
+      const params = byCat[cat.id];
+      if (!params || !params.length) continue;
+      const section = el("div", "param-category");
+      const header = el("div", "param-category-header");
+      header.innerHTML = `<span>${cat.title}</span><span class="chevron">&#9660;</span>`;
+      header.onclick = () => section.classList.toggle("collapsed");
+      const body = el("div", "param-category-body");
+      for (const p of params) body.appendChild(buildParamRow(p));
+      section.appendChild(header); section.appendChild(body);
+      panel.appendChild(section);
     }
   }
-  row.appendChild(control);
-  return row;
 }
 
 async function saveParams() {
