@@ -537,6 +537,60 @@ function buildParamPanel() {
   }
 }
 
+
+function buildParamRow(p) {
+  const row = el("div", "param-row");
+  const label = el("span", "param-label", p.label); label.title = p.label;
+  row.appendChild(label);
+  const control = el("div", "param-control");
+  switch(p.type) {
+    case "bool": {
+      const t = el("div", "param-toggle");
+      if(State.params[p.name]) t.classList.add("on");
+      t.onclick = () => { State.params[p.name]=!State.params[p.name]; t.classList.toggle("on"); scheduleRerun(); };
+      control.appendChild(t); break;
+    }
+    case "float": case "int": {
+      const sl = el("input","param-slider"); sl.type="range"; sl.min=p.min; sl.max=p.max; sl.step=p.step; sl.value=State.params[p.name]??p.default;
+      const ip = el("input","param-input"); ip.type="number"; ip.min=p.min; ip.max=p.max; ip.step=p.step; ip.value=State.params[p.name]??p.default;
+      sl.oninput = () => { State.params[p.name]=parseFloat(sl.value); ip.value=sl.value; scheduleRerun(); };
+      ip.onchange = () => { let v=parseFloat(ip.value)||p.default; v=Math.max(p.min,Math.min(p.max,v)); State.params[p.name]=v; sl.value=v; ip.value=v; scheduleRerun(); };
+      control.appendChild(sl); control.appendChild(ip); break;
+    }
+    case "select": {
+      const s = el("select","param-select");
+      for(const o of p.options){ const op=el("option",null,o); if(o===State.params[p.name]) op.selected=true; s.appendChild(op); }
+      s.onchange = () => { State.params[p.name]=s.value; scheduleRerun(); };
+      control.appendChild(s); break;
+    }
+    case "multiselect": {
+      const chips = el("div","multiselect-row");
+      for(const o of p.options){ const c=el("span","multiselect-chip",o); if(State.params[p.name]?.includes(o)) c.classList.add("active");
+        c.onclick=()=>{ let a=State.params[p.name]||[]; a=a.includes(o)?a.filter(x=>x!==o):[...a,o]; State.params[p.name]=a; c.classList.toggle("active"); scheduleRerun(); };
+        chips.appendChild(c); }
+      control.appendChild(chips); break;
+    }
+    case "weights": {
+      const w = State.params[p.name]||p.default;
+      for(const o of p.options){ const wr=el("div","weight-row"); wr.appendChild(el("span","weight-label",o));
+        const wi=el("input","weight-input"); wi.type="number"; wi.step="0.05"; wi.min="0"; wi.max="1"; wi.value=w[o]??0;
+        wi.onchange=()=>{ let v=parseFloat(wi.value)||0; v=Math.max(0,Math.min(1,v)); if(!State.params[p.name])State.params[p.name]={}; State.params[p.name][o]=v; wi.value=v; scheduleRerun(); };
+        wr.appendChild(wi); control.appendChild(wr); }
+      break;
+    }
+    case "tuple_float": {
+      const a=State.params[p.name]||p.default;
+      const i1=el("input","param-input"); i1.type="number"; i1.step="0.1"; i1.value=a[0]??0;
+      const i2=el("input","param-input"); i2.type="number"; i2.step="0.1"; i2.value=a[1]??0;
+      const upd=()=>{ State.params[p.name]=[parseFloat(i1.value)||0, parseFloat(i2.value)||0]; scheduleRerun(); };
+      i1.onchange=upd; i2.onchange=upd;
+      control.appendChild(i1); control.appendChild(i2); break;
+    }
+  }
+  row.appendChild(control);
+  return row;
+}
+
 async function saveParams() {
   if(!State.currentProduct){ alert("请先选择产品"); return; }
   setStatus("保存中...","status-running");
