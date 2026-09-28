@@ -165,6 +165,7 @@ async function runFlow(opts = {}) {
       showRoiOverlay(interactiveStep.interactive_data);
       // Still render the pipeline with the interactive step
       renderPipeline(result);
+      buildParamPanel();
       setStatus("请绘制ROI区域", "status-running");
     } else {
       renderPipeline(result);
@@ -468,12 +469,16 @@ function buildStepCard(step) {
 
 // ---- Parameter panel: organized by operator step ----
 function buildParamPanel() {
-  const panel = $("param-panel"); panel.innerHTML = "";
+  const panel = $("param-panel");
+  const dbg = `schema=${!!State.schema}, flowMeta=${State.flowMeta ? State.flowMeta.length : 'null'}, currentFlow=${State.currentFlow}`;
+  panel.innerHTML = `<div style="padding:8px;color:#888;font-size:11px">[DEBUG ${dbg}]</div>`;
+  if (!State.schema) { console.log("[buildParamPanel] no schema"); return; }
   if (!State.schema) return;
   const paramMap = {};
   for (const p of State.schema.params) paramMap[p.name] = p;
 
   if (State.flowMeta && State.flowMeta.length > 0) {
+    console.log("[buildParamPanel] flowMeta has", State.flowMeta.length, "ops");
     const groups = [];
     let lastGroup = "";
     for (let i = 0; i < State.flowMeta.length; i++) {
@@ -484,6 +489,7 @@ function buildParamPanel() {
       }
       groups[groups.length - 1].ops.push({ ...op, index: i });
     }
+    console.log('[buildParamPanel] groups:', groups.map(g => g.name));
     for (const grp of groups) {
       let hasParams = false;
       for (const op of grp.ops) {
@@ -508,6 +514,7 @@ function buildParamPanel() {
       section.appendChild(header);
       section.appendChild(body);
       panel.appendChild(section);
+      console.log("[buildParamPanel] added section:", grp.name, "with", body.children.length, "elements");
     }
   } else {
     const byCat = {};
