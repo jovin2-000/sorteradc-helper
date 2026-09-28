@@ -77,10 +77,26 @@ class BoundaryOptimize(Operator):
             optimized = roi[y0:y1, x0:x1]
             ctx.set("roi_optimized", optimized)
             vis = roi.copy()
+            if len(vis.shape) == 2:
+                vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
+            # Green: die contour bounding rect
             cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(vis, "die", (x + 5, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+            # Yellow: actual ROI after border_x/border_y expansion
+            cv2.rectangle(vis, (x0, y0), (x1 - 1, y1 - 1), (0, 255, 255), 2)
+            cv2.putText(vis, f"ROI +{bx},+{by}", (x0 + 5, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+            # Draw arrows showing the margin
+            for dx in [x - x0, x1 - (x + w)]:
+                if dx > 0:
+                    mid_y = y + h // 2
+                    cv2.arrowedLine(vis, (x0, mid_y), (x, mid_y), (0, 255, 255), 1, tipLength=0.3)
+                    cv2.arrowedLine(vis, (x1, mid_y), (x + w, mid_y), (0, 255, 255), 1, tipLength=0.3)
             return self._result(vis, {"contours": len(contours),
                                        "area": int(cv2.contourArea(best)),
-                                       "bbox": f"{w}x{h}"})
+                                       "die_bbox": f"{w}x{h}",
+                                       "roi_bbox": f"{x1-x0}x{y1-y0}",
+                                       "border_x": bx, "border_y": by})
         ctx.set("roi_optimized", roi)
         return self._result(roi, {"contours": 0}, status="fail")
 
